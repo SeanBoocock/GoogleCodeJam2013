@@ -51,11 +51,11 @@
 
 */
 
+#include <bitset>
 #include <cmath>
 #include <fstream>
 #include <stdint.h>
 #include <vector>
-#include <utility>
 
 static auto s_defaultSmallTestCasePath = "TestCases/D-small-practice.in";
 static auto s_defaultLargeTestCasePath = "TestCases/D-large-practice-1.in";
@@ -77,12 +77,12 @@ struct TestCase
 
 struct Result
 {
-	std::vector<uint32_t> Chests;
+	std::vector<uint16_t> Chests;
 };
 
 typedef std::vector<TestCase> TestList;
 
-TestList ParseInput(int argumentCount, char** arguments)
+const TestList ParseInput(int argumentCount, char** arguments)
 {
 	const char* testCasePath = nullptr;
 	TestList testCases;
@@ -113,20 +113,24 @@ TestList ParseInput(int argumentCount, char** arguments)
 		testCase.InitialKeys.resize(numberOfKeys);
 		for(auto& key : testCase.InitialKeys)
 		{
-			fileStream >> key;
+			uint32_t keyType = 0;
+			fileStream >> keyType;
+			key = static_cast<KeyType>(keyType);
 		}
 
 		testCase.Chests.resize(numberOfChests);
 		for(auto& chest : testCase.Chests)
 		{
-			uint32_t numberOfChestKeys = 0;
-			fileStream >> chest.ToOpen >> numberOfChestKeys;
+			uint32_t numberOfChestKeys = 0, keyType = 0;
+			fileStream >> keyType >> numberOfChestKeys;
+			chest.ToOpen = static_cast<KeyType>(keyType);
 			if(numberOfChestKeys > 0)
 			{
 				chest.KeysInside.resize(numberOfChestKeys);
 				for(auto& chestKey : chest.KeysInside)
 				{
-					fileStream >> chestKey;
+					fileStream >> keyType;
+					chestKey = static_cast<KeyType>(keyType);
 				}
 			}
 		}
@@ -135,9 +139,107 @@ TestList ParseInput(int argumentCount, char** arguments)
 	return testCases;
 }
 
-void EvaluateTestCases(TestList& testCases)
+bool Evaluate(const std::vector<KeyType>& currentKeys, std::bitset<200> unlockedChests, Result& chestOrder, const TestCase& testCase, uint32_t unopenedChestCount)
 {
+	if(unopenedChestCount == 0)
+	{
+		return true;
+	}
 
+	if(currentKeys.empty())
+	{
+		return false;
+	}
+
+	for(auto keyIt = currentKeys.begin(), endKeyIt = currentKeys.end();
+		keyIt != endKeyIt;
+		++keyIt)
+	{
+		uint32_t chestIndex = 0;
+		for(auto& chest : testCase.Chests)
+		{
+			if(unlockedChests.at(chestIndex)
+				|| *keyIt != chest.ToOpen)
+			{
+				++chestIndex;
+				continue;
+			}
+
+			auto level = chestOrder.Chests.size();
+			chestOrder.Chests.push_back(chestIndex);
+			std::vector<KeyType> nextLevel(currentKeys);
+			nextLevel.erase(nextLevel.begin() + std::distance(currentKeys.begin(), keyIt));
+			nextLevel.insert(nextLevel.end(), chest.KeysInside.begin(), chest.KeysInside.end());
+			unlockedChests.set(chestIndex);
+			if(Evaluate(nextLevel, unlockedChests, chestOrder, testCase, --unopenedChestCount))
+			{
+				return true;
+			}
+			unlockedChests.set(chestIndex, false);
+			chestOrder.Chests.erase(chestOrder.Chests.begin() + level, chestOrder.Chests.end());
+			++chestIndex;
+		}
+	}
+
+	return false;
+}
+
+bool IsBetterResult(const Result& existingResult, const Result& newResult)
+{
+	if(existingResult.Chests.empty())
+	{
+		return true;
+	}
+
+	for(auto existingIt = existingResult.Chests.begin(), newIt = newResult.Chests.begin();
+		existingIt != existingResult.Chests.end() && newIt != newResult.Chests.end();
+		++existingIt, ++newIt)
+	{
+		if(*existingIt < *newIt)
+		{
+			return false;
+		}
+		else if(*newIt < *existingIt)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+std::vector<Result> EvaluateTestCases(const TestList& testCases)
+{
+	std::vector<Result> results(testCases.size());
+	auto resultIt = results.begin();
+	for(auto& test : testCases)
+	{
+		std::bitset<200> unlockedChests;
+		std::vector<KeyType> keys(test.InitialKeys);
+		for(uint32_t index = 0, end = keys.size(); index < end; ++index)
+		{
+			Result result;
+			if(!Evaluate(keys, unlockedChests, result, test, test.Chests.size()))
+			{
+				break;
+			}
+
+			if(IsBetterResult(*resultIt, result))
+			{
+				if(resultIt->Chests.empty())
+				{
+					resultIt->Chests.resize(result.Chests.size());
+				}
+				std::copy(result.Chests.begin(), result.Chests.end(), resultIt->Chests.begin());
+			}
+
+			auto frontKey = keys.front();
+			keys.erase(keys.begin());
+			keys.push_back(frontKey);	
+		}
+		++resultIt;
+	}
+	return results;
 }
 
 void ReportResults(const std::vector<Result>& testCaseResults)
@@ -146,7 +248,19 @@ void ReportResults(const std::vector<Result>& testCaseResults)
 	uint32_t resultCount = 1;
 	for(auto& result : testCaseResults)
 	{
-		
+		out << "Case #" << resultCount++ << ":";
+		if(result.Chests.empty())
+		{
+			out << " IMPOSSIBLE" << std::endl;
+		}
+		else
+		{
+			for(auto& chest : result.Chests)
+			{
+				out << " " << (chest + 1);
+			}
+			out << std::endl;
+		}
 	}
 }
 
@@ -154,9 +268,9 @@ int main(int argumentCount, char** arguments)
 {
 	auto testCases = ParseInput(argumentCount, arguments);
 	
-	EvaluateTestCases(testCases);
+	auto results = EvaluateTestCases(testCases);
 
-	//ReportResults(results);
+	ReportResults(results);
 
 	return 0;
 }
