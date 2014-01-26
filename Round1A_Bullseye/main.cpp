@@ -99,7 +99,7 @@ std::vector<RingCount> Evaluate(const std::vector<TestCase>& testCases)
 	{
 		RingCount count = 0;
 		double paint = static_cast<double>(testCase.Paint);
-		for (uint32_t radius = testCase.Radius;; radius += 2)
+		for (uint32_t radius = testCase.Radius;; radius += 2, ++count)
 		{
 			auto ithCirclePaint = 2.0 * radius + 1.0;
 			if (ithCirclePaint > paint)
